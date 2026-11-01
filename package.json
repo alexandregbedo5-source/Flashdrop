@@ -1,9 +1,10 @@
 {
   "name": "flashdrop",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Ultra-fast local file transfer between PC and smartphone without internet",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js 5050",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
