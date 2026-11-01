@@ -167,6 +167,18 @@ function initSignaling() {
       case 'p2p-file-meta':
         handleIncomingFileMeta(msg.sender, msg.metadata);
         break;
+
+      case 'peer-direct-share':
+        showToast(`[OK] Reçu de ${msg.senderName || 'un appareil'} : ${msg.filename} (${formatBytes(msg.size)})`);
+        playBeep(true);
+        // Téléchargement direct sans saturation mémoire
+        const dl = document.createElement('a');
+        dl.href = msg.downloadUrl;
+        dl.download = msg.filename;
+        document.body.appendChild(dl);
+        dl.click();
+        document.body.removeChild(dl);
+        break;
     }
   };
 
@@ -468,13 +480,16 @@ function setupDataChannel(dc, peerId) {
   dc.bufferedAmountLowThreshold = 64 * 1024;
 }
 
-function waitForChannelsOpen(channels) {
-  return Promise.all(channels.map(dc => {
-    if (dc.readyState === 'open') return Promise.resolve();
-    return new Promise(resolve => {
-      dc.onopen = () => resolve();
-    });
-  }));
+function waitForChannelsOpen(channels, timeoutMs = 3500) {
+  return Promise.race([
+    Promise.all(channels.map(dc => {
+      if (dc.readyState === 'open') return Promise.resolve();
+      return new Promise(resolve => {
+        dc.onopen = () => resolve();
+      });
+    })),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('WebRTC timeout')), timeoutMs))
+  ]);
 }
 
 async function handleRTCOffer(senderId, sdp) {
@@ -521,14 +536,115 @@ function cleanupRTC(peerId) {
 }
 
 async function sendFilesP2P(targetPeerId, files) {
-  let conn = rtcConnections.get(targetPeerId);
-  if (!conn || !conn.ready) {
-    showToast('[...] Connexion P2P...');
-    conn = await initWebRTCConnection(targetPeerId);
-  }
-
   for (const file of files) {
-    await sendSingleFileP2P(conn, targetPeerId, file);
+    // Pour les gros fichiers (> 30 Mo) ou si le réseau isole les clients :
+    // Utiliser le relais local ultra-rapide (évite le crash mémoire du navigateur mobile)
+    if (file.size > 30 * 1024 * 1024) {
+      await sendViaLocalRelay(targetPeerId, file);
+      continue;
+    }
+
+    try {
+      let conn = rtcConnections.get(targetPeerId);
+      if (!conn || !conn.ready) {
+        showToast('[...] Connexion P2P directe...');
+        conn = await initWebRTCConnection(targetPeerId);
+      }
+      await sendSingleFileP2P(conn, targetPeerId, file);
+    } catch (err) {
+      console.warn('P2P direct indisponible, bascule sur le relais local:', err.message);
+      showToast('[//] P2P direct indisponible -> Relais Turbo activé');
+      await sendViaLocalRelay(targetPeerId, file);
+    }
+  }
+}
+
+// Relais local haute performance (100+ Mo/s, sans saturation mémoire du smartphone récepteur)
+async function sendViaLocalRelay(targetPeerId, file) {
+  showTransferPanel(file.name, file.size, 'Relais Turbo (100+ Mo/s)');
+
+  try {
+    let uploadedFilename = file.name;
+
+    if (file.size >= 12 * 1024 * 1024) {
+      // 5 flux TCP parallèles
+      const initRes = await fetch('/api/upload/multi/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, totalSize: file.size })
+      });
+      const { fileId, chunkSize, concurrency } = await initRes.json();
+      const totalChunks = Math.ceil(file.size / chunkSize);
+      let nextChunkIndex = 0;
+
+      async function worker() {
+        while (nextChunkIndex < totalChunks) {
+          if (state.activeTransfer?.cancelled) break;
+          const chunkIdx = nextChunkIndex++;
+          const start = chunkIdx * chunkSize;
+          const end = Math.min(file.size, start + chunkSize);
+          const chunkBlob = file.slice(start, end);
+
+          await fetch('/api/upload/multi/chunk', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+              'X-File-Id': fileId,
+              'X-Chunk-Offset': start.toString()
+            },
+            body: chunkBlob
+          });
+        }
+      }
+
+      const workers = [];
+      for (let w = 0; w < Math.min(concurrency || 5, totalChunks); w++) {
+        workers.push(worker());
+      }
+      await Promise.all(workers);
+
+      const finishRes = await fetch('/api/upload/multi/finish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId })
+      });
+      const finishData = await finishRes.json();
+      uploadedFilename = finishData.filename;
+    } else {
+      // Stream direct rapide
+      const res = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `/api/upload/fast-stream?filename=${encodeURIComponent(file.name)}&size=${file.size}`, true);
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            reject(new Error(`HTTP ${xhr.status}`));
+          }
+        };
+        xhr.onerror = reject;
+        xhr.send(file);
+      });
+      uploadedFilename = res.filename;
+    }
+
+    // Avertir le smartphone destinataire via WebSocket
+    ws.send(JSON.stringify({
+      type: 'peer-direct-share',
+      target: targetPeerId,
+      senderName: state.deviceName,
+      filename: file.name,
+      size: file.size,
+      downloadUrl: `/api/download/${encodeURIComponent(uploadedFilename)}`
+    }));
+
+    playBeep(true);
+    showToast(`[OK] Envoyé vers l'appareil cible : ${file.name}`);
+  } catch (err) {
+    playBeep(false);
+    showToast(`[ERR] ${err.message}`);
+  } finally {
+    hideTransferPanel();
   }
 }
 
