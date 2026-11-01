@@ -87,22 +87,59 @@ function formatBytes(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// Initialisation réseau & QR code
-async function initNetworkInfo() {
+// Initialisation réseau & QR code avec sélecteur d'interface
+async function initNetworkInfo(targetIp = null) {
   try {
-    const res = await fetch('/api/info');
+    const url = targetIp ? `/api/info?ip=${encodeURIComponent(targetIp)}` : '/api/info';
+    const res = await fetch(url);
     const data = await res.json();
     state.serverUrl = data.url;
-    dom.networkIp.textContent = data.primaryIp;
+    dom.networkIp.textContent = data.selectedIp || data.primaryIp;
     dom.serverUrlInput.value = data.url;
     dom.qrImg.src = data.qrCode;
 
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     dom.myDeviceIcon.textContent = isMobile ? '(o.o)' : '(-_-)';
     dom.myDeviceName.textContent = isMobile ? 'Smartphone [TEL]' : 'Ordinateur [PC]';
+
+    const ipSelect = document.getElementById('ip-select');
+    if (ipSelect && ipSelect.options.length === 0 && data.interfaces) {
+      data.interfaces.forEach(iface => {
+        const opt = document.createElement('option');
+        opt.value = iface.address;
+        opt.textContent = iface.label || `${iface.name} (${iface.address})`;
+        if (iface.address === (data.selectedIp || data.primaryIp)) opt.selected = true;
+        ipSelect.appendChild(opt);
+      });
+
+      const customOpt = document.createElement('option');
+      customOpt.value = 'custom';
+      customOpt.textContent = 'Saisir une adresse IP manuellement...';
+      ipSelect.appendChild(customOpt);
+
+      ipSelect.onchange = (e) => {
+        if (e.target.value === 'custom') {
+          const customIp = prompt("Entrez l'adresse IP de votre PC (ex: 192.168.1.30 ou 192.168.137.1) :");
+          if (customIp && customIp.trim()) {
+            initNetworkInfo(customIp.trim());
+          }
+        } else {
+          initNetworkInfo(e.target.value);
+        }
+      };
+    }
   } catch (err) {
     console.warn('Erreur info reseau:', err);
   }
+}
+
+if (dom.serverUrlInput) {
+  dom.serverUrlInput.onchange = () => {
+    try {
+      const u = new URL(dom.serverUrlInput.value);
+      initNetworkInfo(u.hostname);
+    } catch (e) {}
+  };
 }
 
 // ----------------------------------------------------

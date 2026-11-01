@@ -118,6 +118,10 @@
           <button class="close-btn" id="close-qr-modal">&times;</button>
         </div>
         <div class="modal-body">
+          <div class="network-select-box" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 4px;">
+            <label for="ip-select" style="font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted);">Choisir l'adresse réseau :</label>
+            <select id="ip-select" style="background: var(--bg-page); border: 1px solid var(--border); color: var(--text-primary); font-family: var(--font-mono); font-size: 0.75rem; padding: 6px 10px; border-radius: var(--radius); outline: none;"></select>
+          </div>
           <div class="qr-box">
             <img id="qr-img" src="" alt="QR Code">
           </div>
@@ -125,7 +129,7 @@
             Scannez ce code avec votre smartphone connecté au même réseau ou au point d'accès.
           </p>
           <div class="input-group">
-            <input type="text" id="server-url-input" readonly value="http://...">
+            <input type="text" id="server-url-input" value="http://...">
             <button id="copy-url-btn" class="copy-btn">Copier</button>
           </div>
         </div>
