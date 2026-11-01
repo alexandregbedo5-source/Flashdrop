@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>FlashDrop — Transfert Local</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090b">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header Minimaliste -->
+    <header class="app-header">
+      <div class="logo">
+        <span class="logo-tag">//</span>
+        <span class="logo-text">FlashDrop</span>
+        <span class="badge">[LAN]</span>
+      </div>
+      <div class="header-actions">
+        <button id="qr-btn" class="nav-btn" title="QR Code de connexion">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="18" y1="7" x2="18.01" y2="7"/><line x1="7" y1="18" x2="7.01" y2="18"/><line x1="18" y1="18" x2="18.01" y2="18"/></svg>
+          <span>Scanner</span>
+        </button>
+        <button id="downloads-btn" class="nav-btn" title="Fichiers reçus">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Fichiers</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Info Bar -->
+      <div class="status-bar">
+        <div class="status-left">
+          <span class="dot-indicator"></span>
+          <span class="device-label">Appareil : <strong id="my-device-name">PC</strong></span>
+        </div>
+        <span class="ip-mono" id="network-ip">127.0.0.1</span>
+      </div>
+
+      <!-- Radar minimalist -->
+      <section class="radar-box">
+        <div class="radar-ring ring-3"></div>
+        <div class="radar-ring ring-2"></div>
+        <div class="radar-ring ring-1"></div>
+        <div class="radar-center">
+          <span class="emoticon" id="my-device-icon">(*_*)</span>
+        </div>
+        <div id="peers-container" class="peers-layer"></div>
+      </section>
+
+      <!-- Direct Transfer Card -->
+      <section class="action-card" id="host-transfer-card">
+        <div class="action-card-header">
+          <div>
+            <div class="section-tag">[TRANSFERT DIRECT]</div>
+            <h2 class="section-title">Envoyer des fichiers</h2>
+            <p class="section-desc">Flux continu sur disque, sans limite de taille.</p>
+          </div>
+          <button id="direct-send-btn" class="action-btn">
+            Sélectionner
+          </button>
+        </div>
+      </section>
+
+      <!-- Dropzone -->
+      <div id="dropzone" class="dropzone">
+        <input type="file" id="file-input" multiple style="display: none;">
+        <div class="dropzone-content">
+          <div class="emoticon-drop">( ^_^) / [fichiers]</div>
+          <p class="drop-primary">Glissez vos fichiers ici ou cliquez</p>
+          <p class="drop-secondary">Réseau local sécurisé • Zéro connexion Internet requise</p>
+        </div>
+      </div>
+
+      <!-- Progression du transfert -->
+      <div id="transfer-panel" class="transfer-panel hidden">
+        <div class="transfer-card">
+          <div class="transfer-header">
+            <span class="file-tag">[FILE]</span>
+            <div class="transfer-info">
+              <div id="transfer-filename" class="transfer-name">nom_fichier.ext</div>
+              <div id="transfer-stats" class="transfer-size">0 / 0 (0%)</div>
+            </div>
+            <button id="cancel-transfer-btn" class="close-btn" title="Annuler">&times;</button>
+          </div>
+
+          <div class="progress-track">
+            <div id="progress-bar-fill" class="progress-fill" style="width: 0%;"></div>
+          </div>
+
+          <div class="transfer-footer">
+            <div class="stat-col">
+              <span class="stat-label">Débit</span>
+              <span id="transfer-speed" class="stat-val">0 Mo/s</span>
+            </div>
+            <div class="stat-col">
+              <span class="stat-label">Restant</span>
+              <span id="transfer-eta" class="stat-val">--</span>
+            </div>
+            <div class="stat-col">
+              <span class="stat-label">Protocole</span>
+              <span id="transfer-channels" class="stat-val">Direct Stream</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Modal QR Code -->
+    <div id="qr-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Connexion Mobile</h3>
+          <button class="close-btn" id="close-qr-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="qr-box">
+            <img id="qr-img" src="" alt="QR Code">
+          </div>
+          <p class="modal-hint">
+            Scannez ce code avec votre smartphone connecté au même réseau ou au point d'accès.
+          </p>
+          <div class="input-group">
+            <input type="text" id="server-url-input" readonly value="http://...">
+            <button id="copy-url-btn" class="copy-btn">Copier</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Fichiers Reçus -->
+    <div id="downloads-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Fichiers Reçus</h3>
+          <button class="close-btn" id="close-downloads-modal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div id="downloads-list" class="downloads-list">
+            <p class="empty-text">Aucun fichier reçu.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast hidden">
+      <span id="toast-message">Message</span>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
